@@ -107,20 +107,19 @@ func (b *Bucket) GetFileInfoByName(ctx context.Context, name string) (*FileInfo,
 // It works like sql.Rows: use Next to advance and then FileInfo.
 // Check Err once Next returns false.
 //
-//     l := b.ListFiles("")
-//     for l.Next() {
-//         fi := l.FileInfo()
-//         ...
-//     }
-//     if err := l.Err(); err != nil {
-//         ...
-//     }
+//	l := b.ListFiles("")
+//	for l.Next() {
+//	    fi := l.FileInfo()
+//	    ...
+//	}
+//	if err := l.Err(); err != nil {
+//	    ...
+//	}
 //
 // A Listing handles pagination transparently, so it iterates until
 // the last file in the bucket. To limit the number of results, do this.
 //
-//     for i := 0; i < limit && l.Next(); i++ {
-//
+//	for i := 0; i < limit && l.Next(); i++ {
 type Listing struct {
 	ctx              context.Context
 	b                *Bucket

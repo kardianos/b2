@@ -1,6 +1,6 @@
 // Package b2 provides an idiomatic, efficient interface to Backblaze B2 Cloud Storage.
 //
-// Uploading
+// # Uploading
 //
 // Uploads to B2 require a SHA1 header, so the hash of the file must be known
 // before the upload starts. The (*Bucket).Upload API tries its best not to
@@ -11,29 +11,28 @@
 // (*Bucket).UploadWithSHA1 but you are responsible for retrying on
 // transient errors.
 //
-// Downloading
+// # Downloading
 //
 // Downloads from B2 are simple GETs, so if you want more control than the
 // standard functions you can build your own URL according to the API docs.
 // All the information you need is returned by Client.LoginInfo().
 //
-// Hidden files and versions
+// # Hidden files and versions
 //
 // There is no first-class support for versions in this library, but most
 // behaviors are transparently exposed.  Upload can be used multiple times
 // with the same name, ListFiles will only return the latest version of
 // non-hidden files, and ListFilesVersions will return all files and versions.
 //
-// Unsupported APIs
+// # Unsupported APIs
 //
 // Large files (b2_*_large_file, b2_*_part), b2_get_download_authorization,
 // b2_hide_file, b2_update_bucket.
 //
-// Debug mode
+// # Debug mode
 //
 // If the B2_DEBUG environment variable is set to 1, all API calls will be
-// logged. On Go 1.7 and later, it will also log when new (non-reused)
-// connections are established.
+// logged and also log when new (non-reused) connections are established.
 package b2
 
 import (
