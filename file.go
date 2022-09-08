@@ -28,7 +28,7 @@ type FileInfo struct {
 	// BucketID string
 
 	ContentSHA1   string // hex encoded
-	ContentLength int
+	ContentLength int64
 	ContentType   string
 
 	CustomMetadata  map[string]interface{}
@@ -42,7 +42,7 @@ type FileInfo struct {
 type fileInfoObj struct {
 	AccountID       string                 `json:"accountId"`
 	BucketID        string                 `json:"bucketId"`
-	ContentLength   int                    `json:"contentLength"`
+	ContentLength   int64                  `json:"contentLength"`
 	ContentSHA1     string                 `json:"contentSha1"`
 	ContentType     string                 `json:"contentType"`
 	FileID          string                 `json:"fileId"`

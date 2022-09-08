@@ -43,7 +43,7 @@ func TestFileLifecycle(t *testing.T) {
 
 	file := make([]byte, 123456)
 	rand.Read(file)
-	fiu, err := b.Upload(ctx, bytes.NewReader(file), "test-foo", "")
+	fiu, err := b.Upload(ctx, bytes.NewReader(file), "test-foo", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestFileListing(t *testing.T) {
 	rand.Read(file)
 
 	for i := 0; i < 2; i++ {
-		fi, err := b.Upload(ctx, bytes.NewReader(file), "test-3", "")
+		fi, err := b.Upload(ctx, bytes.NewReader(file), "test-3", "", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -146,7 +146,7 @@ func TestFileListing(t *testing.T) {
 
 	var fileIDs []string
 	for i := 0; i < 5; i++ {
-		fi, err := b.Upload(ctx, bytes.NewReader(file), fmt.Sprintf("test-%d", i), "")
+		fi, err := b.Upload(ctx, bytes.NewReader(file), fmt.Sprintf("test-%d", i), "", nil)
 		if err != nil {
 			t.Fatal(err)
 		}

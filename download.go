@@ -86,7 +86,7 @@ func parseFileInfoHeaders(h http.Header) (*FileInfo, error) {
 		return nil, err
 	}
 	fi.UploadTimestamp = time.Unix(timestamp/1e3, timestamp%1e3*1e6)
-	fi.ContentLength, err = strconv.Atoi(h.Get("Content-Length"))
+	fi.ContentLength, err = strconv.ParseInt(h.Get("Content-Length"), 10, 64)
 	if err != nil {
 		return nil, err
 	}

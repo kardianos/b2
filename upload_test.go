@@ -18,7 +18,7 @@ func TestUploadError(t *testing.T) {
 
 	file := make([]byte, 123456)
 	rand.Read(file)
-	_, err := b.Upload(ctx, bytes.NewReader(file), "illegal\x00filename", "")
+	_, err := b.Upload(ctx, bytes.NewReader(file), "illegal\x00filename", "", nil)
 	if err == nil {
 		t.Fatal("Expected an error")
 	}
@@ -52,7 +52,7 @@ func TestUploadFile(t *testing.T) {
 	}
 	defer f.Close()
 
-	fi, err := b.Upload(ctx, f, "foo-file", "")
+	fi, err := b.Upload(ctx, f, "foo-file", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestUploadBuffer(t *testing.T) {
 	content := make([]byte, 123456)
 	rand.Read(content)
 	buf := bytes.NewBuffer(content)
-	fi, err := b.Upload(ctx, buf, "foo-file", "")
+	fi, err := b.Upload(ctx, buf, "foo-file", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestUploadReader(t *testing.T) {
 	content := make([]byte, 123456)
 	rand.Read(content)
 	r := bytes.NewReader(content)
-	fi, err := b.Upload(ctx, ioutil.NopCloser(r), "foo-file", "") // shadow Seek method
+	fi, err := b.Upload(ctx, ioutil.NopCloser(r), "foo-file", "", nil) // shadow Seek method
 	if err != nil {
 		t.Fatal(err)
 	}

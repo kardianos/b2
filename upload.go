@@ -25,7 +25,7 @@ import (
 // the SHA1 and once to upload.
 //
 // If a file by this name already exist, a new version will be created.
-func (b *Bucket) Upload(ctx context.Context, r io.Reader, name, mimeType string) (*FileInfo, error) {
+func (b *Bucket) Upload(ctx context.Context, r io.Reader, name, mimeType string, metadata map[string]string) (*FileInfo, error) {
 	var body io.ReadSeeker
 	switch r := r.(type) {
 	case *bytes.Buffer:
@@ -55,7 +55,7 @@ func (b *Bucket) Upload(ctx context.Context, r io.Reader, name, mimeType string)
 			return nil, err
 		}
 
-		fi, err = b.UploadWithSHA1(ctx, body, name, mimeType, sha1Sum, length)
+		fi, err = b.UploadWithSHA1(ctx, body, name, mimeType, sha1Sum, length, metadata)
 		if err == nil {
 			break
 		}
@@ -116,7 +116,7 @@ func (b *Bucket) putUploadURL(u *uploadURL) {
 //
 // This is an advanced interface, most clients should use Upload, and consider
 // passing it a bytes.Buffer or io.ReadSeeker to avoid buffering.
-func (b *Bucket) UploadWithSHA1(ctx context.Context, r io.Reader, name, mimeType, sha1Sum string, length int64) (*FileInfo, error) {
+func (b *Bucket) UploadWithSHA1(ctx context.Context, r io.Reader, name, mimeType, sha1Sum string, length int64, metadata map[string]string) (*FileInfo, error) {
 	uurl, err := b.getUploadURL(ctx)
 	if err != nil {
 		return nil, err
@@ -131,6 +131,9 @@ func (b *Bucket) UploadWithSHA1(ctx context.Context, r io.Reader, name, mimeType
 	req.Header.Set("X-Bz-File-Name", url.QueryEscape(name))
 	req.Header.Set("Content-Type", mimeType)
 	req.Header.Set("X-Bz-Content-Sha1", sha1Sum)
+	for k, v := range metadata {
+		req.Header.Set("X-Bz-Info-"+k, v)
+	}
 
 	res, err := b.c.hc.Do(req)
 	if err != nil {
