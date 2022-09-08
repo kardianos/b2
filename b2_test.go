@@ -1,6 +1,7 @@
 package b2_test
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/hex"
@@ -13,13 +14,13 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/FiloSottile/b2"
+	"github.com/kardianos/b2"
 )
 
 var client *b2.Client
 var clientMu sync.Mutex
 
-func getClient(t *testing.T) *b2.Client {
+func getClient(t *testing.T, ctx context.Context) *b2.Client {
 	accountID := os.Getenv("ACCOUNT_ID")
 	applicationKey := os.Getenv("APPLICATION_KEY")
 	if accountID == "" || applicationKey == "" {
@@ -30,7 +31,7 @@ func getClient(t *testing.T) *b2.Client {
 	if client != nil {
 		return client
 	}
-	c, err := b2.NewClient(accountID, applicationKey, &http.Client{
+	c, err := b2.NewClient(ctx, accountID, applicationKey, &http.Client{
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			TLSClientConfig: &tls.Config{
@@ -51,8 +52,9 @@ func TestMain(m *testing.M) {
 	flag.Parse()
 
 	if *cleanup {
-		c := getClient(nil)
-		buckets, err := c.Buckets()
+		ctx := context.Background()
+		c := getClient(nil, ctx)
+		buckets, err := c.Buckets(ctx, "")
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -61,17 +63,17 @@ func TestMain(m *testing.M) {
 				continue
 			}
 			log.Println("Deleting bucket", b.Name)
-			l := b.ListFilesVersions("", "")
+			l := b.ListFilesVersions(ctx, "", "")
 			for l.Next() {
 				fi := l.FileInfo()
-				if err := c.DeleteFile(fi.ID, fi.Name); err != nil {
+				if err := c.DeleteFile(ctx, fi.ID, fi.Name); err != nil {
 					log.Fatal(err)
 				}
 			}
 			if err := l.Err(); err != nil {
 				log.Fatal(err)
 			}
-			if err := b.Delete(); err != nil {
+			if err := b.Delete(ctx); err != nil {
 				log.Fatal(err)
 			}
 		}
@@ -81,20 +83,21 @@ func TestMain(m *testing.M) {
 }
 
 func TestBucketLifecycle(t *testing.T) {
-	c := getClient(t)
+	ctx := context.Background()
+	c := getClient(t, ctx)
 
 	r := make([]byte, 6)
 	rand.Read(r)
 	name := "test-" + hex.EncodeToString(r)
 
-	if _, err := c.BucketByName(name, false); err == nil {
+	if _, err := c.BucketByName(ctx, name, false); err == nil {
 		t.Fatal("bucket exists?")
 	}
-	b, err := c.BucketByName(name, true)
+	b, err := c.BucketByName(ctx, name, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	buckets, err := c.Buckets()
+	buckets, err := c.Buckets(ctx, name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,28 +117,29 @@ func TestBucketLifecycle(t *testing.T) {
 		t.Fatal("Bucket did not appear in Buckets()")
 	}
 
-	if err := b.Delete(); err != nil {
+	if err := b.Delete(ctx); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := c.BucketByName(name, false); err == nil {
+	if _, err := c.BucketByName(ctx, name, false); err == nil {
 		t.Fatal("Bucket did not disappear")
 	}
 }
 
 func TestUnwrapError(t *testing.T) {
-	c := getClient(t)
+	ctx := context.Background()
+	c := getClient(t, ctx)
 
-	_, err := c.GetFileInfoByID("jhgvcfgcgvhjhbjvghcf")
-	if e, ok := b2.UnwrapError(err); !ok || e == nil {
-		t.Fatalf("%T %v", err, err)
+	_, err := c.GetFileInfoByID(ctx, "jhgvcfgcgvhjhbjvghcf")
+	if _, ok := b2.UnwrapError(err); !ok {
+		t.Fatalf("%[1]T %[1]v", err)
 	}
 
-	if err, ok := b2.UnwrapError(nil); ok || err != nil {
+	if err, ok := b2.UnwrapError(nil); ok {
 		t.Fatal(err)
 	}
 
-	if err, ok := b2.UnwrapError(errors.New("test")); ok || err != nil {
+	if err, ok := b2.UnwrapError(errors.New("test")); ok {
 		t.Fatal(err)
 	}
 }

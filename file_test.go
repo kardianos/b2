@@ -2,6 +2,7 @@ package b2_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha1"
 	"encoding/hex"
@@ -11,15 +12,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/FiloSottile/b2"
+	"github.com/kardianos/b2"
 )
 
-func getBucket(t *testing.T, c *b2.Client) *b2.BucketInfo {
+func getBucket(t *testing.T, ctx context.Context, c *b2.Client) *b2.BucketInfo {
 	r := make([]byte, 6)
 	rand.Read(r)
 	name := "test-" + hex.EncodeToString(r)
 
-	b, err := c.CreateBucket(name, false)
+	b, err := c.CreateBucket(ctx, name, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,24 +29,26 @@ func getBucket(t *testing.T, c *b2.Client) *b2.BucketInfo {
 }
 
 func deleteBucket(t *testing.T, b *b2.BucketInfo) {
-	if err := b.Delete(); err != nil {
+	ctx := context.Background()
+	if err := b.Delete(ctx); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestFileLifecycle(t *testing.T) {
-	c := getClient(t)
-	b := getBucket(t, c)
+	ctx := context.Background()
+	c := getClient(t, ctx)
+	b := getBucket(t, ctx, c)
 	defer deleteBucket(t, b)
 
 	file := make([]byte, 123456)
 	rand.Read(file)
-	fiu, err := b.Upload(bytes.NewReader(file), "test-foo", "")
+	fiu, err := b.Upload(ctx, bytes.NewReader(file), "test-foo", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	fi, err := c.GetFileInfoByID(fiu.ID)
+	fi, err := c.GetFileInfoByID(ctx, fiu.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,19 +72,19 @@ func TestFileLifecycle(t *testing.T) {
 		t.Error("Wrong SHA1")
 	}
 
-	fi, err = b.GetFileInfoByName("test-foo")
+	fi, err = b.GetFileInfoByName(ctx, "test-foo")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if fi.ID != fiu.ID {
 		t.Error("Mismatched file ID in GetByName")
 	}
-	_, err = b.GetFileInfoByName("not-exists")
+	_, err = b.GetFileInfoByName(ctx, "not-exists")
 	if err != b2.FileNotFoundError {
 		t.Errorf("b.GetFileInfoByName did not return FileNotFoundError: %v", err)
 	}
 
-	rc, fi2, err := c.DownloadFileByID(fiu.ID)
+	rc, fi2, err := c.DownloadFileByID(ctx, fiu.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +106,7 @@ func TestFileLifecycle(t *testing.T) {
 	}
 	rc.Close()
 
-	rc, fi3, err := c.DownloadFileByName(b.Name, "test-foo")
+	rc, fi3, err := c.DownloadFileByName(ctx, b.Name, "test-foo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,38 +122,39 @@ func TestFileLifecycle(t *testing.T) {
 	}
 	rc.Close()
 
-	if err := c.DeleteFile(fiu.ID, "test-foo"); err != nil {
+	if err := c.DeleteFile(ctx, fiu.ID, "test-foo"); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestFileListing(t *testing.T) {
-	c := getClient(t)
-	b := getBucket(t, c)
+	ctx := context.Background()
+	c := getClient(t, ctx)
+	b := getBucket(t, ctx, c)
 	defer deleteBucket(t, b)
 
 	file := make([]byte, 1234)
 	rand.Read(file)
 
 	for i := 0; i < 2; i++ {
-		fi, err := b.Upload(bytes.NewReader(file), "test-3", "")
+		fi, err := b.Upload(ctx, bytes.NewReader(file), "test-3", "")
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer c.DeleteFile(fi.ID, fi.Name)
+		defer c.DeleteFile(ctx, fi.ID, fi.Name)
 	}
 
 	var fileIDs []string
 	for i := 0; i < 5; i++ {
-		fi, err := b.Upload(bytes.NewReader(file), fmt.Sprintf("test-%d", i), "")
+		fi, err := b.Upload(ctx, bytes.NewReader(file), fmt.Sprintf("test-%d", i), "")
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer c.DeleteFile(fi.ID, fi.Name)
+		defer c.DeleteFile(ctx, fi.ID, fi.Name)
 		fileIDs = append(fileIDs, fi.ID)
 	}
 
-	i, l := 0, b.ListFiles("")
+	i, l := 0, b.ListFiles(ctx, "")
 	for l.Next() {
 		fi := l.FileInfo()
 		if fi.ID != fileIDs[i] {
@@ -165,7 +169,7 @@ func TestFileListing(t *testing.T) {
 		t.Errorf("got %d files, expected %d", i-1, len(fileIDs)-1)
 	}
 
-	i, l = 1, b.ListFiles("test-1")
+	i, l = 1, b.ListFiles(ctx, "test-1")
 	l.SetPageCount(3)
 	for l.Next() {
 		fi := l.FileInfo()
@@ -181,7 +185,7 @@ func TestFileListing(t *testing.T) {
 		t.Errorf("got %d files, expected %d", i-1, len(fileIDs)-1)
 	}
 
-	i, l = 0, b.ListFilesVersions("", "")
+	i, l = 0, b.ListFilesVersions(ctx, "", "")
 	l.SetPageCount(2)
 	for l.Next() {
 		i++

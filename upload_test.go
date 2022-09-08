@@ -2,6 +2,7 @@ package b2_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"io"
 	"io/ioutil"
@@ -10,13 +11,14 @@ import (
 )
 
 func TestUploadError(t *testing.T) {
-	c := getClient(t)
-	b := getBucket(t, c)
+	ctx := context.Background()
+	c := getClient(t, ctx)
+	b := getBucket(t, ctx, c)
 	defer deleteBucket(t, b)
 
 	file := make([]byte, 123456)
 	rand.Read(file)
-	_, err := b.Upload(bytes.NewReader(file), "illegal//filename", "")
+	_, err := b.Upload(ctx, bytes.NewReader(file), "illegal\x00filename", "")
 	if err == nil {
 		t.Fatal("Expected an error")
 	}
@@ -24,8 +26,9 @@ func TestUploadError(t *testing.T) {
 }
 
 func TestUploadFile(t *testing.T) {
-	c := getClient(t)
-	b := getBucket(t, c)
+	ctx := context.Background()
+	c := getClient(t, ctx)
+	b := getBucket(t, ctx, c)
 	defer deleteBucket(t, b)
 
 	tmpfile, err := ioutil.TempFile("", "b2")
@@ -49,11 +52,11 @@ func TestUploadFile(t *testing.T) {
 	}
 	defer f.Close()
 
-	fi, err := b.Upload(f, "foo-file", "")
+	fi, err := b.Upload(ctx, f, "foo-file", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.DeleteFile(fi.ID, fi.Name)
+	defer c.DeleteFile(ctx, fi.ID, fi.Name)
 	if fi.ContentLength != 123456 {
 		t.Error("mismatched fi.ContentLength", fi.ContentLength)
 	}
@@ -63,18 +66,19 @@ func TestUploadFile(t *testing.T) {
 }
 
 func TestUploadBuffer(t *testing.T) {
-	c := getClient(t)
-	b := getBucket(t, c)
+	ctx := context.Background()
+	c := getClient(t, ctx)
+	b := getBucket(t, ctx, c)
 	defer deleteBucket(t, b)
 
 	content := make([]byte, 123456)
 	rand.Read(content)
 	buf := bytes.NewBuffer(content)
-	fi, err := b.Upload(buf, "foo-file", "")
+	fi, err := b.Upload(ctx, buf, "foo-file", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.DeleteFile(fi.ID, fi.Name)
+	defer c.DeleteFile(ctx, fi.ID, fi.Name)
 	if fi.ContentLength != 123456 {
 		t.Error("mismatched fi.ContentLength", fi.ContentLength)
 	}
@@ -84,18 +88,19 @@ func TestUploadBuffer(t *testing.T) {
 }
 
 func TestUploadReader(t *testing.T) {
-	c := getClient(t)
-	b := getBucket(t, c)
+	ctx := context.Background()
+	c := getClient(t, ctx)
+	b := getBucket(t, ctx, c)
 	defer deleteBucket(t, b)
 
 	content := make([]byte, 123456)
 	rand.Read(content)
 	r := bytes.NewReader(content)
-	fi, err := b.Upload(ioutil.NopCloser(r), "foo-file", "") // shadow Seek method
+	fi, err := b.Upload(ctx, ioutil.NopCloser(r), "foo-file", "") // shadow Seek method
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.DeleteFile(fi.ID, fi.Name)
+	defer c.DeleteFile(ctx, fi.ID, fi.Name)
 	if fi.ContentLength != 123456 {
 		t.Error("mismatched fi.ContentLength", fi.ContentLength)
 	}

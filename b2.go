@@ -38,6 +38,7 @@ package b2
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -46,11 +47,21 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"os"
 	"sync"
 	"sync/atomic"
 )
+
+func addTracing(req *http.Request) *http.Request {
+	trace := &httptrace.ClientTrace{
+		ConnectStart: func(network, addr string) {
+			debugf("new connection to %s (for %s)", addr, req.URL.Path)
+		},
+	}
+	return req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+}
 
 // Error is the decoded B2 JSON error return value. It's not the only type of
 // error returned by this package, and it is mostly returned wrapped in a
@@ -61,7 +72,7 @@ type Error struct {
 	Status  int
 }
 
-func (e *Error) Error() string {
+func (e Error) Error() string {
 	return fmt.Sprintf("b2 remote error [%s]: %s", e.Code, e.Message)
 }
 
@@ -102,9 +113,9 @@ type LoginInfo struct {
 //
 // Note that once you obtain this there is no guarantee on its freshness,
 // and it will eventually expire.
-func (c *Client) LoginInfo(refresh bool) (*LoginInfo, error) {
+func (c *Client) LoginInfo(ctx context.Context, refresh bool) (*LoginInfo, error) {
 	if refresh {
-		if err := c.login(nil); err != nil {
+		if err := c.login(ctx, nil); err != nil {
 			return nil, err
 		}
 	}
@@ -127,7 +138,8 @@ type Client struct {
 
 // NewClient calls b2_authorize_account and returns an authenticated Client.
 // httpClient can be nil, in which case http.DefaultClient will be used.
-func NewClient(accountID, applicationKey string, httpClient *http.Client) (*Client, error) {
+// ctx is used for initial login and is not stored.
+func NewClient(ctx context.Context, accountID, applicationKey string, httpClient *http.Client) (*Client, error) {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
@@ -138,7 +150,7 @@ func NewClient(accountID, applicationKey string, httpClient *http.Client) (*Clie
 		hc:             httpClient,
 	}
 
-	if err := c.login(nil); err != nil {
+	if err := c.login(ctx, nil); err != nil {
 		return nil, err
 	}
 
@@ -146,7 +158,7 @@ func NewClient(accountID, applicationKey string, httpClient *http.Client) (*Clie
 	return c, nil
 }
 
-func (c *Client) login(failedRes *http.Response) error {
+func (c *Client) login(ctx context.Context, failedRes *http.Response) error {
 	c.loginMu.Lock()
 	defer c.loginMu.Unlock()
 
@@ -160,7 +172,7 @@ func (c *Client) login(failedRes *http.Response) error {
 		}
 	}
 
-	r, err := http.NewRequest("GET", defaultAPIURL+apiPath+"b2_authorize_account", nil)
+	r, err := http.NewRequestWithContext(ctx, "GET", defaultAPIURL+apiPath+"b2_authorize_account", nil)
 	if err != nil {
 		return err
 	}
@@ -197,17 +209,12 @@ type transport struct {
 	c *Client
 }
 
-// requestExtFunc is implemented in the go1.7 file, to add httptrace
-var requestExtFunc func(*http.Request) *http.Request
-
 func (t *transport) RoundTrip(req *http.Request) (res *http.Response, err error) {
 	if req.Header.Get("Authorization") == "" {
 		req.Header.Set("Authorization", t.c.loginInfo.Load().(*LoginInfo).AuthorizationToken)
 	}
 
-	if requestExtFunc != nil {
-		req = requestExtFunc(req)
-	}
+	req = addTracing(req)
 
 	if t.t == nil {
 		res, err = http.DefaultTransport.RoundTrip(req)
@@ -230,20 +237,30 @@ func debugf(format string, a ...interface{}) {
 	}
 }
 
-func (c *Client) doRequest(endpoint string, params map[string]interface{}) (*http.Response, error) {
+func (c *Client) doRequest(ctx context.Context, endpoint string, params any) (*http.Response, error) {
 	body, err := json.Marshal(params)
 	if err != nil {
 		return nil, err
 	}
-	// Reduce debug log noise
-	// delete(params, "accountID")
-	delete(params, "bucketID")
 
 	apiURL := c.loginInfo.Load().(*LoginInfo).ApiURL
-	res, err := c.hc.Post(apiURL+apiPath+endpoint, "application/json", bytes.NewBuffer(body))
+	U := apiURL + apiPath + endpoint
+	req, err := http.NewRequestWithContext(ctx, "POST", U, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := c.hc.Do(req)
 	if e, ok := UnwrapError(err); ok && e.Status == http.StatusUnauthorized {
-		if err = c.login(res); err == nil {
-			res, err = c.hc.Post(apiURL+apiPath+endpoint, "application/json", bytes.NewBuffer(body))
+		if err = c.login(ctx, res); err == nil {
+			U = apiURL + apiPath + endpoint
+			req, err = http.NewRequestWithContext(ctx, "POST", U, bytes.NewBuffer(body))
+			if err != nil {
+				return nil, err
+			}
+			req.Header.Set("Content-Type", "application/json")
+			res, err = c.hc.Do(req)
 		}
 	}
 	if err != nil {
@@ -297,8 +314,8 @@ func (c *Client) BucketByID(id string) *Bucket {
 // BucketByName returns the Bucket with the given name. If such a bucket is not
 // found and createIfNotExists is true, CreateBucket is called with allPublic set
 // to false. Otherwise, an error is returned.
-func (c *Client) BucketByName(name string, createIfNotExists bool) (*BucketInfo, error) {
-	bs, err := c.Buckets(name)
+func (c *Client) BucketByName(ctx context.Context, name string, createIfNotExists bool) (*BucketInfo, error) {
+	bs, err := c.Buckets(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -310,15 +327,18 @@ func (c *Client) BucketByName(name string, createIfNotExists bool) (*BucketInfo,
 	if !createIfNotExists {
 		return nil, errors.New("bucket not found: " + name)
 	}
-	return c.CreateBucket(name, false)
+	return c.CreateBucket(ctx, name, false)
 }
 
 // Buckets returns a list of buckets sorted by name.
-func (c *Client) Buckets(name string) ([]*BucketInfo, error) {
-	res, err := c.doRequest("b2_list_buckets", map[string]interface{}{
+func (c *Client) Buckets(ctx context.Context, name string) ([]*BucketInfo, error) {
+	params := map[string]interface{}{
 		"accountId": c.loginInfo.Load().(*LoginInfo).AccountID,
-		"bucketName": name,
-	})
+	}
+	if len(name) > 0 {
+		params["bucketName"] = name
+	}
+	res, err := c.doRequest(ctx, "b2_list_buckets", params)
 	if err != nil {
 		return nil, err
 	}
@@ -347,12 +367,12 @@ func (c *Client) Buckets(name string) ([]*BucketInfo, error) {
 
 // CreateBucket creates a bucket with b2_create_bucket. If allPublic is true,
 // files in this bucket can be downloaded by anybody.
-func (c *Client) CreateBucket(name string, allPublic bool) (*BucketInfo, error) {
+func (c *Client) CreateBucket(ctx context.Context, name string, allPublic bool) (*BucketInfo, error) {
 	bucketType := "allPrivate"
 	if allPublic {
 		bucketType = "allPublic"
 	}
-	res, err := c.doRequest("b2_create_bucket", map[string]interface{}{
+	res, err := c.doRequest(ctx, "b2_create_bucket", map[string]interface{}{
 		"accountId":  c.loginInfo.Load().(*LoginInfo).AccountID,
 		"bucketName": name,
 		"bucketType": bucketType,
@@ -378,8 +398,8 @@ func (c *Client) CreateBucket(name string, allPublic bool) (*BucketInfo, error) 
 
 // Delete calls b2_delete_bucket. After this call succeeds the Bucket object
 // becomes invalid and any other calls will fail.
-func (b *Bucket) Delete() error {
-	res, err := b.c.doRequest("b2_delete_bucket", map[string]interface{}{
+func (b *Bucket) Delete(ctx context.Context) error {
+	res, err := b.c.doRequest(ctx, "b2_delete_bucket", map[string]interface{}{
 		"accountId": b.c.loginInfo.Load().(*LoginInfo).AccountID,
 		"bucketId":  b.ID,
 	})

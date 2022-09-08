@@ -1,6 +1,7 @@
 package b2
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"strconv"
@@ -13,12 +14,21 @@ import (
 //
 // Note: the (*FileInfo).CustomMetadata values returned by this function are
 // all represented as strings, because they are delivered by HTTP headers.
-func (c *Client) DownloadFileByID(id string) (io.ReadCloser, *FileInfo, error) {
+func (c *Client) DownloadFileByID(ctx context.Context, id string) (io.ReadCloser, *FileInfo, error) {
 	downloadURL := c.loginInfo.Load().(*LoginInfo).DownloadURL
-	res, err := c.hc.Get(downloadURL + apiPath + "b2_download_file_by_id?fileId=" + id)
+	U := downloadURL + apiPath + "b2_download_file_by_id?fileId=" + id
+	req, err := http.NewRequestWithContext(ctx, "GET", U, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	res, err := c.hc.Do(req)
 	if e, ok := UnwrapError(err); ok && e.Status == http.StatusUnauthorized {
-		if err = c.login(res); err == nil {
-			res, err = c.hc.Get(downloadURL + apiPath + "b2_download_file_by_id?fileId=" + id)
+		if err = c.login(ctx, res); err == nil {
+			req, err := http.NewRequestWithContext(ctx, "GET", U, nil)
+			if err != nil {
+				return nil, nil, err
+			}
+			res, err = c.hc.Do(req)
 		}
 	}
 	if err != nil {
@@ -36,12 +46,21 @@ func (c *Client) DownloadFileByID(id string) (io.ReadCloser, *FileInfo, error) {
 //
 // Note: the (*FileInfo).CustomMetadata values returned by this function are
 // all represented as strings, because they are delivered by HTTP headers.
-func (c *Client) DownloadFileByName(bucket, file string) (io.ReadCloser, *FileInfo, error) {
+func (c *Client) DownloadFileByName(ctx context.Context, bucket, file string) (io.ReadCloser, *FileInfo, error) {
 	downloadURL := c.loginInfo.Load().(*LoginInfo).DownloadURL
-	res, err := c.hc.Get(downloadURL + "/file/" + bucket + "/" + file)
+	U := downloadURL + "/file/" + bucket + "/" + file
+	req, err := http.NewRequestWithContext(ctx, "GET", U, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	res, err := c.hc.Do(req)
 	if e, ok := UnwrapError(err); ok && e.Status == http.StatusUnauthorized {
-		if err = c.login(res); err == nil {
-			res, err = c.hc.Get(downloadURL + "/file/" + bucket + "/" + file)
+		if err = c.login(ctx, res); err == nil {
+			req, err := http.NewRequestWithContext(ctx, "GET", U, nil)
+			if err != nil {
+				return nil, nil, err
+			}
+			res, err = c.hc.Do(req)
 		}
 	}
 	if err != nil {

@@ -2,6 +2,7 @@ package b2
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
@@ -24,7 +25,7 @@ import (
 // the SHA1 and once to upload.
 //
 // If a file by this name already exist, a new version will be created.
-func (b *Bucket) Upload(r io.Reader, name, mimeType string) (*FileInfo, error) {
+func (b *Bucket) Upload(ctx context.Context, r io.Reader, name, mimeType string) (*FileInfo, error) {
 	var body io.ReadSeeker
 	switch r := r.(type) {
 	case *bytes.Buffer:
@@ -54,7 +55,7 @@ func (b *Bucket) Upload(r io.Reader, name, mimeType string) (*FileInfo, error) {
 			return nil, err
 		}
 
-		fi, err = b.UploadWithSHA1(body, name, mimeType, sha1Sum, length)
+		fi, err = b.UploadWithSHA1(ctx, body, name, mimeType, sha1Sum, length)
 		if err == nil {
 			break
 		}
@@ -62,7 +63,7 @@ func (b *Bucket) Upload(r io.Reader, name, mimeType string) (*FileInfo, error) {
 			// We are forced to pass nil to login, risking a double login (which is
 			// wasteful, but not harmful) because the API does not give us access to
 			// the failed response (without hacks).
-			if err := b.c.login(nil); err != nil {
+			if err := b.c.login(ctx, nil); err != nil {
 				return nil, err
 			}
 			i--
@@ -75,7 +76,7 @@ type uploadURL struct {
 	UploadURL, AuthorizationToken string
 }
 
-func (b *Bucket) getUploadURL() (u *uploadURL, err error) {
+func (b *Bucket) getUploadURL(ctx context.Context) (u *uploadURL, err error) {
 	b.uploadURLsMu.Lock()
 	if len(b.uploadURLs) > 0 {
 		u = b.uploadURLs[len(b.uploadURLs)-1]
@@ -86,7 +87,7 @@ func (b *Bucket) getUploadURL() (u *uploadURL, err error) {
 		return
 	}
 
-	res, err := b.c.doRequest("b2_get_upload_url", map[string]interface{}{
+	res, err := b.c.doRequest(ctx, "b2_get_upload_url", map[string]any{
 		"bucketId": b.ID,
 	})
 	if err != nil {
@@ -115,13 +116,13 @@ func (b *Bucket) putUploadURL(u *uploadURL) {
 //
 // This is an advanced interface, most clients should use Upload, and consider
 // passing it a bytes.Buffer or io.ReadSeeker to avoid buffering.
-func (b *Bucket) UploadWithSHA1(r io.Reader, name, mimeType, sha1Sum string, length int64) (*FileInfo, error) {
-	uurl, err := b.getUploadURL()
+func (b *Bucket) UploadWithSHA1(ctx context.Context, r io.Reader, name, mimeType, sha1Sum string, length int64) (*FileInfo, error) {
+	uurl, err := b.getUploadURL(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", uurl.UploadURL, ioutil.NopCloser(r))
+	req, err := http.NewRequestWithContext(ctx, "POST", uurl.UploadURL, ioutil.NopCloser(r))
 	if err != nil {
 		return nil, err
 	}

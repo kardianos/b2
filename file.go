@@ -1,14 +1,15 @@
 package b2
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"time"
 )
 
 // DeleteFile deletes a file version.
-func (c *Client) DeleteFile(id, name string) error {
-	res, err := c.doRequest("b2_delete_file_version", map[string]interface{}{
+func (c *Client) DeleteFile(ctx context.Context, id, name string) error {
+	res, err := c.doRequest(ctx, "b2_delete_file_version", map[string]interface{}{
 		"fileId": id, "fileName": name,
 	})
 	if err != nil {
@@ -67,8 +68,8 @@ func (fi *fileInfoObj) makeFileInfo() *FileInfo {
 // GetFileInfoByID obtains a FileInfo for a given ID.
 //
 // The ID can refer to any file version or "hide" action in any bucket.
-func (c *Client) GetFileInfoByID(id string) (*FileInfo, error) {
-	res, err := c.doRequest("b2_get_file_info", map[string]interface{}{
+func (c *Client) GetFileInfoByID(ctx context.Context, id string) (*FileInfo, error) {
+	res, err := c.doRequest(ctx, "b2_get_file_info", map[string]interface{}{
 		"fileId": id,
 	})
 	if err != nil {
@@ -88,8 +89,8 @@ var FileNotFoundError = errors.New("no file with the given name in the bucket")
 //
 // If the file doesn't exist, FileNotFoundError is returned.
 // If multiple versions of the file exist, only the latest is returned.
-func (b *Bucket) GetFileInfoByName(name string) (*FileInfo, error) {
-	l := b.ListFiles(name)
+func (b *Bucket) GetFileInfoByName(ctx context.Context, name string) (*FileInfo, error) {
+	l := b.ListFiles(ctx, name)
 	l.SetPageCount(1)
 	if l.Next() {
 		if l.FileInfo().Name == name {
@@ -121,6 +122,7 @@ func (b *Bucket) GetFileInfoByName(name string) (*FileInfo, error) {
 //     for i := 0; i < limit && l.Next(); i++ {
 //
 type Listing struct {
+	ctx              context.Context
 	b                *Bucket
 	versions         bool
 	nextPageCount    int
@@ -170,7 +172,7 @@ func (l *Listing) Next() bool {
 	if l.nextID != nil && *l.nextID != "" {
 		data["startFileId"] = *l.nextID
 	}
-	r, err := l.b.c.doRequest(endpoint, data)
+	r, err := l.b.c.doRequest(l.ctx, endpoint, data)
 	if err != nil {
 		l.err = err
 		return false
@@ -212,8 +214,9 @@ func (l *Listing) Err() error {
 //
 // ListFiles only returns the most recent version of each (non-hidden) file.
 // If you want to fetch all versions, use ListFilesVersions.
-func (b *Bucket) ListFiles(fromName string) *Listing {
+func (b *Bucket) ListFiles(ctx context.Context, fromName string) *Listing {
 	return &Listing{
+		ctx:      ctx,
 		b:        b,
 		nextName: &fromName,
 	}
@@ -223,13 +226,14 @@ func (b *Bucket) ListFiles(fromName string) *Listing {
 // alphabetically sorted first, and by reverse of date/time uploaded then.
 //
 // If fromID is specified, the name-and-id pair is the starting point.
-func (b *Bucket) ListFilesVersions(fromName, fromID string) *Listing {
+func (b *Bucket) ListFilesVersions(ctx context.Context, fromName, fromID string) *Listing {
 	if fromName == "" && fromID != "" {
 		return &Listing{
 			err: errors.New("can't set fromID if fromName is not set"),
 		}
 	}
 	return &Listing{
+		ctx:      ctx,
 		b:        b,
 		versions: true,
 		nextName: &fromName,
