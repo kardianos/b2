@@ -91,7 +91,7 @@ func parseFileInfoHeaders(h http.Header) (*FileInfo, error) {
 		return nil, err
 	}
 
-	fi.CustomMetadata = make(map[string]interface{})
+	fi.CustomMetadata = make(map[string]string)
 	for name := range h {
 		if !strings.HasPrefix(name, "X-Bz-Info-") {
 			continue

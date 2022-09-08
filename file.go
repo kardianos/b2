@@ -31,7 +31,7 @@ type FileInfo struct {
 	ContentLength int64
 	ContentType   string
 
-	CustomMetadata  map[string]interface{}
+	CustomMetadata  map[string]string
 	UploadTimestamp time.Time
 
 	// If Action is "hide", this ID does not refer to a file version
@@ -40,16 +40,16 @@ type FileInfo struct {
 }
 
 type fileInfoObj struct {
-	AccountID       string                 `json:"accountId"`
-	BucketID        string                 `json:"bucketId"`
-	ContentLength   int64                  `json:"contentLength"`
-	ContentSHA1     string                 `json:"contentSha1"`
-	ContentType     string                 `json:"contentType"`
-	FileID          string                 `json:"fileId"`
-	FileInfo        map[string]interface{} `json:"fileInfo"`
-	FileName        string                 `json:"fileName"`
-	UploadTimestamp int64                  `json:"uploadTimestamp"`
-	Action          string                 `json:"action"`
+	AccountID       string            `json:"accountId"`
+	BucketID        string            `json:"bucketId"`
+	ContentLength   int64             `json:"contentLength"`
+	ContentSHA1     string            `json:"contentSha1"`
+	ContentType     string            `json:"contentType"`
+	FileID          string            `json:"fileId"`
+	FileInfo        map[string]string `json:"fileInfo"`
+	FileName        string            `json:"fileName"`
+	UploadTimestamp int64             `json:"uploadTimestamp"`
+	Action          string            `json:"action"`
 }
 
 func (fi *fileInfoObj) makeFileInfo() *FileInfo {
