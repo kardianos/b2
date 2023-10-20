@@ -90,7 +90,7 @@ func UnwrapError(err error) (b2Err *Error, ok bool) {
 
 const (
 	defaultAPIURL = "https://api.backblaze.com"
-	apiPath       = "/b2api/v1/"
+	apiPath       = "/b2api/v2/"
 )
 
 // LoginInfo holds the information obtained upon login, which are sufficient

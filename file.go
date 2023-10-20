@@ -19,6 +19,15 @@ func (c *Client) DeleteFile(ctx context.Context, id, name string) error {
 	return nil
 }
 
+type FileAction string
+
+const (
+	FileStart  FileAction = "start"  // A large file has been started, but not finished or canceled.
+	FileUpload FileAction = "upload" // A file was uploaded.
+	FileHide   FileAction = "hide"   // A file version marking the file as hidden.
+	FileFolder FileAction = "folder" // A virtual folder when listing files.
+)
+
 // A FileInfo is the metadata associated with a specific file version.
 type FileInfo struct {
 	ID   string
@@ -36,7 +45,7 @@ type FileInfo struct {
 
 	// If Action is "hide", this ID does not refer to a file version
 	// but to an hiding action. Otherwise "upload".
-	Action string
+	Action FileAction
 }
 
 type fileInfoObj struct {
@@ -60,7 +69,7 @@ func (fi *fileInfoObj) makeFileInfo() *FileInfo {
 		ContentSHA1:     fi.ContentSHA1,
 		ContentType:     fi.ContentType,
 		CustomMetadata:  fi.FileInfo,
-		Action:          fi.Action,
+		Action:          FileAction(fi.Action),
 		UploadTimestamp: time.Unix(fi.UploadTimestamp/1e3, fi.UploadTimestamp%1e3*1e6),
 	}
 }
@@ -83,14 +92,14 @@ func (c *Client) GetFileInfoByID(ctx context.Context, id string) (*FileInfo, err
 	return fi.makeFileInfo(), nil
 }
 
-var FileNotFoundError = errors.New("no file with the given name in the bucket")
+var ErrFileNotFound = errors.New("no file with the given name in the bucket")
 
 // GetFileInfoByName obtains a FileInfo for a given name.
 //
 // If the file doesn't exist, FileNotFoundError is returned.
 // If multiple versions of the file exist, only the latest is returned.
 func (b *Bucket) GetFileInfoByName(ctx context.Context, name string) (*FileInfo, error) {
-	l := b.ListFiles(ctx, name)
+	l := b.ListFiles(ctx, ListOptions{FromName: name})
 	l.SetPageCount(1)
 	if l.Next() {
 		if l.FileInfo().Name == name {
@@ -100,7 +109,7 @@ func (b *Bucket) GetFileInfoByName(ctx context.Context, name string) (*FileInfo,
 	if err := l.Err(); err != nil {
 		return nil, l.Err()
 	}
-	return nil, FileNotFoundError
+	return nil, ErrFileNotFound
 }
 
 // A Listing is the result of (*Bucket).ListFiles[Versions].
@@ -126,17 +135,20 @@ type Listing struct {
 	versions         bool
 	nextPageCount    int
 	nextName, nextID *string
+	prefix, delim    string
 	objects          []*FileInfo // in reverse order
 	err              error
 }
+
+const maxCount = 1000
 
 // SetPageCount controls the number of results to be fetched with each API
 // call. The maximum n is 1000, higher values are automatically limited to 1000.
 //
 // SetPageCount does not limit the number of results returned by a Listing.
 func (l *Listing) SetPageCount(n int) {
-	if n > 1000 {
-		n = 1000
+	if n > maxCount {
+		n = maxCount
 	}
 	l.nextPageCount = n
 }
@@ -164,6 +176,13 @@ func (l *Listing) Next() bool {
 		"startFileName": *l.nextName,
 		"maxFileCount":  l.nextPageCount,
 	}
+	if len(l.prefix) > 0 {
+		data["prefix"] = l.prefix
+	}
+	if len(l.delim) > 0 {
+		data["delimiter"] = l.delim
+	}
+
 	endpoint := "b2_list_file_names"
 	if l.versions {
 		endpoint = "b2_list_file_versions"
@@ -207,17 +226,26 @@ func (l *Listing) Err() error {
 	return l.err
 }
 
+type ListOptions struct {
+	FromName  string
+	FromID    string // Only used for List File Versions, must set FromName.
+	Prefix    string
+	Delimiter string
+}
+
 // ListFiles returns a Listing of files in the Bucket, alphabetically sorted,
 // starting from the file named fromName (included if it exists). To start from
 // the first file in the bucket, set fileName to "".
 //
 // ListFiles only returns the most recent version of each (non-hidden) file.
 // If you want to fetch all versions, use ListFilesVersions.
-func (b *Bucket) ListFiles(ctx context.Context, fromName string) *Listing {
+func (b *Bucket) ListFiles(ctx context.Context, o ListOptions) *Listing {
 	return &Listing{
 		ctx:      ctx,
 		b:        b,
-		nextName: &fromName,
+		nextName: &o.FromName,
+		prefix:   o.Prefix,
+		delim:    o.Delimiter,
 	}
 }
 
@@ -225,17 +253,19 @@ func (b *Bucket) ListFiles(ctx context.Context, fromName string) *Listing {
 // alphabetically sorted first, and by reverse of date/time uploaded then.
 //
 // If fromID is specified, the name-and-id pair is the starting point.
-func (b *Bucket) ListFilesVersions(ctx context.Context, fromName, fromID string) *Listing {
-	if fromName == "" && fromID != "" {
+func (b *Bucket) ListFileVersions(ctx context.Context, o ListOptions) *Listing {
+	if o.FromName == "" && o.FromID != "" {
 		return &Listing{
-			err: errors.New("can't set fromID if fromName is not set"),
+			err: errors.New("can't set FromID if FromName is not set"),
 		}
 	}
 	return &Listing{
 		ctx:      ctx,
 		b:        b,
 		versions: true,
-		nextName: &fromName,
-		nextID:   &fromID,
+		nextName: &o.FromName,
+		nextID:   &o.FromID,
+		prefix:   o.Prefix,
+		delim:    o.Delimiter,
 	}
 }

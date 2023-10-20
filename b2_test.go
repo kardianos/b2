@@ -63,7 +63,7 @@ func TestMain(m *testing.M) {
 				continue
 			}
 			log.Println("Deleting bucket", b.Name)
-			l := b.ListFilesVersions(ctx, "", "")
+			l := b.ListFileVersions(ctx, b2.ListOptions{})
 			for l.Next() {
 				fi := l.FileInfo()
 				if err := c.DeleteFile(ctx, fi.ID, fi.Name); err != nil {

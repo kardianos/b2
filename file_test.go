@@ -80,7 +80,7 @@ func TestFileLifecycle(t *testing.T) {
 		t.Error("Mismatched file ID in GetByName")
 	}
 	_, err = b.GetFileInfoByName(ctx, "not-exists")
-	if err != b2.FileNotFoundError {
+	if err != b2.ErrFileNotFound {
 		t.Errorf("b.GetFileInfoByName did not return FileNotFoundError: %v", err)
 	}
 
@@ -154,7 +154,7 @@ func TestFileListing(t *testing.T) {
 		fileIDs = append(fileIDs, fi.ID)
 	}
 
-	i, l := 0, b.ListFiles(ctx, "")
+	i, l := 0, b.ListFiles(ctx, b2.ListOptions{})
 	for l.Next() {
 		fi := l.FileInfo()
 		if fi.ID != fileIDs[i] {
@@ -169,7 +169,7 @@ func TestFileListing(t *testing.T) {
 		t.Errorf("got %d files, expected %d", i-1, len(fileIDs)-1)
 	}
 
-	i, l = 1, b.ListFiles(ctx, "test-1")
+	i, l = 1, b.ListFiles(ctx, b2.ListOptions{FromName: "test-1"})
 	l.SetPageCount(3)
 	for l.Next() {
 		fi := l.FileInfo()
@@ -185,7 +185,7 @@ func TestFileListing(t *testing.T) {
 		t.Errorf("got %d files, expected %d", i-1, len(fileIDs)-1)
 	}
 
-	i, l = 0, b.ListFilesVersions(ctx, "", "")
+	i, l = 0, b.ListFileVersions(ctx, b2.ListOptions{})
 	l.SetPageCount(2)
 	for l.Next() {
 		i++
