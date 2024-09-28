@@ -76,7 +76,7 @@ func (c *Client) DownloadFile(ctx context.Context, o DownloadOptions) (io.ReadCl
 		if r.End < 1 {
 			return nil, nil, fmt.Errorf("invalid range end %d, must be greater then 0", r.End)
 		}
-		rs = fmt.Sprintf("%d-%d", r.Begin, r.End)
+		rs = fmt.Sprintf("bytes=%d-%d", r.Begin, r.End)
 	}
 	res, err := c.getWithAuth(ctx, U, rs)
 	if err != nil {

@@ -43,7 +43,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptrace"
@@ -221,11 +220,15 @@ func (t *transport) RoundTrip(req *http.Request) (res *http.Response, err error)
 		res, err = t.t.RoundTrip(req)
 	}
 
-	if err == nil && res.StatusCode != 200 {
-		return nil, parseB2Error(res)
+	if err != nil {
+		return res, err
 	}
-
-	return res, err
+	switch res.StatusCode {
+	default:
+		return nil, parseB2Error(res)
+	case http.StatusOK, http.StatusPartialContent:
+		return res, err
+	}
 }
 
 var debug = os.Getenv("B2_DEBUG") == "1"
@@ -273,8 +276,12 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, params any) (*h
 func parseB2Error(res *http.Response) error {
 	defer drainAndClose(res.Body)
 	b2Err := &Error{}
-	if err := json.NewDecoder(res.Body).Decode(b2Err); err != nil {
-		return fmt.Errorf("unknown error during b2_authorize_account: %d", res.StatusCode)
+	bb, err := io.ReadAll(io.LimitReader(res.Body, 1024*1024))
+	if err != nil {
+		return err
+	}
+	if err := json.NewDecoder(bytes.NewReader(bb)).Decode(b2Err); err != nil {
+		return fmt.Errorf("unknown error during b2_authorize_account: %d -- %s", res.StatusCode, bb)
 	}
 	return b2Err
 }
@@ -282,7 +289,7 @@ func parseB2Error(res *http.Response) error {
 // drainAndClose will make an attempt at flushing and closing the body so that the
 // underlying connection can be reused.  It will not read more than 10KB.
 func drainAndClose(body io.ReadCloser) {
-	io.CopyN(ioutil.Discard, body, 10*1024)
+	io.CopyN(io.Discard, body, 10*1024)
 	body.Close()
 }
 

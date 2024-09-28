@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/rand"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 )
@@ -31,7 +30,7 @@ func TestUploadFile(t *testing.T) {
 	b := getBucket(t, ctx, c)
 	defer deleteBucket(t, b)
 
-	tmpfile, err := ioutil.TempFile("", "b2")
+	tmpfile, err := os.CreateTemp("", "b2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +59,7 @@ func TestUploadFile(t *testing.T) {
 	if fi.ContentLength != 123456 {
 		t.Error("mismatched fi.ContentLength", fi.ContentLength)
 	}
-	if n, err := io.Copy(ioutil.Discard, f); err != nil || n != 0 {
+	if n, err := io.Copy(io.Discard, f); err != nil || n != 0 {
 		t.Error("should have read 0 bytes:", n, err)
 	}
 }
@@ -96,7 +95,7 @@ func TestUploadReader(t *testing.T) {
 	content := make([]byte, 123456)
 	rand.Read(content)
 	r := bytes.NewReader(content)
-	fi, err := b.Upload(ctx, ioutil.NopCloser(r), "foo-file", "", nil) // shadow Seek method
+	fi, err := b.Upload(ctx, io.NopCloser(r), "foo-file", "", nil) // shadow Seek method
 	if err != nil {
 		t.Fatal(err)
 	}

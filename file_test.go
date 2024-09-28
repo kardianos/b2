@@ -7,7 +7,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"reflect"
 	"testing"
 	"time"
@@ -41,7 +41,8 @@ func TestFileLifecycle(t *testing.T) {
 	b := getBucket(t, ctx, c)
 	defer deleteBucket(t, b)
 
-	file := make([]byte, 123456)
+	const fSize = 123456
+	file := make([]byte, fSize)
 	rand.Read(file)
 	fiu, err := b.Upload(ctx, bytes.NewReader(file), "test-foo", "", nil)
 	if err != nil {
@@ -55,7 +56,7 @@ func TestFileLifecycle(t *testing.T) {
 	if fi.ID != fiu.ID {
 		t.Error("Mismatched file ID")
 	}
-	if fi.ContentLength != 123456 {
+	if fi.ContentLength != fSize {
 		t.Error("Mismatched file length")
 	}
 	if fi.Name != "test-foo" {
@@ -70,6 +71,29 @@ func TestFileLifecycle(t *testing.T) {
 	digest := sha1.Sum(file)
 	if fi.ContentSHA1 != hex.EncodeToString(digest[:]) {
 		t.Error("Wrong SHA1")
+	}
+	{
+		rc, fi, err := c.DownloadFile(ctx, b2.DownloadOptions{
+			FileID: fi.ID,
+			Range: b2.Range{
+				Begin: 2,
+				End:   3,
+			},
+		})
+		if err != nil {
+			t.Fatalf("download file: %v", err)
+		}
+		if fi.ContentLength != 2 {
+			t.Fatalf("expected content length of 2, got %d", fi.ContentLength)
+		}
+		body, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			t.Fatalf("failed to read: %v", err)
+		}
+		if g, w := body, file[2:4]; !bytes.Equal(g, w) {
+			t.Fatalf("file download incorrect: want %v got %v", w, g)
+		}
 	}
 
 	fi, err = b.GetFileInfoByName(ctx, "test-foo")
@@ -94,10 +118,10 @@ func TestFileLifecycle(t *testing.T) {
 	if fi2.ContentSHA1 != fi.ContentSHA1 {
 		t.Error("mismatch in c.DownloadFileByID -> fi.ContentSHA1")
 	}
-	if fi2.ContentLength != 123456 {
+	if fi2.ContentLength != fSize {
 		t.Error("mismatch in c.DownloadFileByID -> fi.ContentLength")
 	}
-	body, err := ioutil.ReadAll(rc)
+	body, err := io.ReadAll(rc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +137,7 @@ func TestFileLifecycle(t *testing.T) {
 	if !reflect.DeepEqual(fi2, fi3) {
 		t.Error("DownloadFileByID.FileInfo != DownloadFileByName.FileInfo")
 	}
-	body, err = ioutil.ReadAll(rc)
+	body, err = io.ReadAll(rc)
 	if err != nil {
 		t.Fatal(err)
 	}

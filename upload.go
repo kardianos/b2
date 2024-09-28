@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 )
@@ -35,7 +34,7 @@ func (b *Bucket) Upload(ctx context.Context, r io.Reader, name, mimeType string,
 		body = r
 	default:
 		debugf("upload %s: buffering", name)
-		b, err := ioutil.ReadAll(r)
+		b, err := io.ReadAll(r)
 		if err != nil {
 			return nil, err
 		}
@@ -122,7 +121,7 @@ func (b *Bucket) UploadWithSHA1(ctx context.Context, r io.Reader, name, mimeType
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", uurl.UploadURL, ioutil.NopCloser(r))
+	req, err := http.NewRequestWithContext(ctx, "POST", uurl.UploadURL, io.NopCloser(r))
 	if err != nil {
 		return nil, err
 	}
